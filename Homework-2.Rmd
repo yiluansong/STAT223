@@ -224,7 +224,7 @@ for (h in 1:100) {
 str(pacf_t)
 ```
 
-A sanity check: For stationary AR(3) model, $\phi(3, 1), \phi(3, 1), \phi(3, 1)$ should correspond to the AR coefficients $\phi_1,\phi_2,\phi_3$ and decays to 0 after 3.
+A sanity check: For stationary AR(3) model, $\phi(3, 1), \phi(3, 2), \phi(3, 3)$ should correspond to the AR coefficients $\phi_1,\phi_2,\phi_3$ and decays to 0 after 3.
 
 Recall the AR coefficients are:
 ```{r AR coef again}
@@ -255,10 +255,10 @@ for (h in 1:100) {
 plot(MSE_pred, type="l", ylab="MSE", xlab="h")
 ```
 
-Visualize these predictions with 95% prediction intervals. Here the 95% prediction intervals were calculated as $(y^{t}_{t+h}-1.96MSE^{t}_{t+h}, y^{t}_{t+h}+1.96MSE^{t}_{t+h})$.
+Visualize these predictions with 95% prediction intervals. Here the 95% prediction intervals were calculated as $(y^{t}_{t+h}-1.96\sqrt {MSE^{t}_{t+h}}, y^{t}_{t+h}+1.96 \sqrt{MSE^{t}_{t+h}})$.
 
 ```{r visualize}
-pred_df<-data.frame(time=n+c(1:100),predicted=y_pred, lower=y_pred-1.96*MSE_pred, upper=y_pred+1.96*MSE_pred) 
+pred_df<-data.frame(time=n+c(1:100),predicted=y_pred, lower=y_pred-1.96*sqrt(MSE_pred), upper=y_pred+1.96*sqrt(MSE_pred)) 
 
 obs_df<-data.frame(time=1:n, observed=iso_detrend)
 
@@ -306,9 +306,9 @@ The algorithm is initialized at $y^0_1=0$ and $MSE^0_1=\gamma(0)$.
 
 These are equations (2.19) and (2.20) from Prado & West (2010).
 
-The general workflow of this code is to 1) update all $b$, starting from $b_{t+h-1,t+h-1}$, ending at $b_{t+h-1,h}$; 2) update all $y^t_{t+h}$ using eqn. 5; 3) update all $MSE^{t}_{t+h}$ using eqn. 6. Note that calculations for $h=1$ needs to be done first before calculating for other $h$ in parallel.
+The general workflow of this code is to 1) update all $b$, starting from $b_{t+h-1,t+h-1}$, ending at $b_{t+h-1,h}$; 2) update all $y^t_{t+h}$ using eqn. 5; 3) update all $MSE^{t}_{t+h}$ using eqn. 6.
 
-The calculation of $b$ was fairly slow, so I used parallel computing and stored the output into a csv file. The code for innovations algorithm is included in this R markdown file.
+The calculation of $b$ was fairly slow, so I used parallel computing and stored the output into a csv file. Note that calculations for $h=1$ needs to be done first before calculating for other $h$ in parallel. The code for innovations algorithm is included in this R markdown file.
 ```{r inno, eval=FALSE}
 # placeholders
 y_forecast<-matrix(NA, nrow=n+100+1, ncol=n+100+1)
