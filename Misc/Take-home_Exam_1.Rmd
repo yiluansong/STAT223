@@ -1,0 +1,272 @@
+---
+title: "Take-home_Exam_1"
+author: "Yiluan Song"
+date: "2/24/2020"
+output: html_document
+---
+
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 18px;
+  }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = FALSE)
+knitr::opts_chunk$set(message  = FALSE, warnings=FALSE)
+library(tidyverse)
+```
+
+# (a)
+I simulated 200 observations from the model:
+$$y_t=\theta_t+\nu_t, \nu_t\sim N(0,1),\\
+\theta_t=0.9\theta_{t-1}+\omega_t, \omega_t\sim N(0,1),$$
+, with an initial value $\theta_0=0$.
+```{r}
+theta<-rep(NA, 201)
+ts<-rep(NA, 201)
+theta[1]<-0
+set.seed(10)
+omega<-rnorm(201, 0, 1)
+set.seed(10)
+nu<-rnorm(201, 0, 1)
+
+for (t in 1:200) {
+  theta[t+1]<-0.9*theta[t]+omega[t+1]
+  ts[t+1]<-theta[t+1]+nu[t+1]
+}
+
+ts<-ts[-1]
+theta<-theta[-1]
+ts<-ts-mean(ts)
+```
+
+Here are the plots of $y_{1:200}$ and $\theta_{1:200}$.
+```{r}
+plot(ts, type="l", ylab="y")
+plot(theta, type="l")
+```
+
+# (b)
+Consider an AR(p) model in the form of $\mathbf{y}=\mathbf{F}'\mathbf{\beta}+\mathbf{\epsilon}, \mathbf{\epsilon} \sim N(\mathbf{0}, v\mathbf{I})$. Here $\mathbf{\phi}=\mathbf{\beta}$.
+
+The reference prior is $p(\mathbf{\beta}, v) \propto 1/v$.
+
+The likelihood is $$p(\mathbf{y}|\mathbf{\beta}, v, \mathbf{F}) \propto (2 \pi v)^{-n/2} exp (-Q (y, \mathbf{\beta})/2v)$$, where $$Q(\mathbf{\beta}, \mathbf{y})=(\mathbf{y}-\mathbf{F}'\mathbf{\beta})'(\mathbf{y}-\mathbf{F}'\mathbf{\beta})=(\mathbf{\beta}-\hat{\mathbf{\beta}})'(\mathbf{F}\mathbf{F}')(\mathbf{\beta}-\hat{\mathbf{\beta}})+R$$, with
+$\hat{\mathbf{\beta}} = (\mathbf{F}\mathbf{F}')^{-1}\mathbf{F}\mathbf{y}$ and $R=(\mathbf{y}-\mathbf{F}'\hat{\mathbf{\beta}})'(\mathbf{y}-\mathbf{F}'\hat{\mathbf{\beta}})$, and $s^2=\frac{R}{n-p}$.
+
+The posteriors are therefore the following.
+$$(v|\mathbf{y}, \mathbf{F}) \sim IG (\frac {(n-p)}{2},\frac {(n-p)s^2}{2})$$
+$$(\mathbf{\beta}|v, \mathbf{y}, \mathbf{F}) \sim N(\hat{\beta}, v(FF')^{-1})$$
+I fitted AR(1) to AR(15) models by finding $\hat{\mathbf{\beta}}$ and $s^2$. I then calculated the AIC and BIC scores using the corresponsing $s^2$ following:
+$$AIC=2p+n\log(s^2_p)$$
+$$BIC=\log(n)p+n\log(s^2_p)$$
+
+```{r}
+AIC_p<-rep(NA, 15)
+BIC_p<-rep(NA, 15)
+
+n<-length(ts)
+
+# infer parameters
+for(p in 1:15) {
+  y<-ts[(p+1):(n)]
+  y_prev<-matrix(NA, ncol = n-p, nrow = p)
+  for(i in 1:p) {
+    y_prev[i,]<-ts[(p-i+1):(n-i)]
+  }
+  
+  beta_hat<-solve(y_prev %*% t(y_prev))%*%y_prev%*%y
+  resid<-y-t(y_prev)%*% beta_hat
+  s_square<-(t(resid) %*%(resid))/(n-p)
+  
+  AIC_p[[p]]<-2*(p)+(n-p)*log(s_square)
+  BIC_p[[p]]<-log(n-p)*p+(n-p)*log(s_square)
+}
+
+AICBIC<-data.frame(p=1:15,AIC=AIC_p, BIC=BIC_p)
+ggplot(AICBIC)+
+  geom_point(aes(x=p, y=AIC), col="red", pch="a", cex=5)+
+  geom_point(aes(x=p, y=BIC), col="blue", pch="b", cex=5)+
+  ylab("Score")+
+  xlab("Model order")+
+  theme_classic()
+```
+
+Both AIC and BIC were the lowest at model order 2, so I chose to fit an AR(2) model for the rest of this problem.
+
+Using the $\hat{\mathbf{\beta}}$ and $s^2$ from AR(2), I generated 500 samples from the posteriors of $v$ and then from $\mathbf{\phi}$. 
+```{r}
+p<-2
+# Reference prior
+y<-ts[(p+1):(n)]
+y_prev<-matrix(NA, ncol = n-p, nrow = p)
+for(i in 1:p) {
+  y_prev[i,]<-ts[(p-i+1):(n-i)]
+}
+
+beta_hat<-solve(y_prev %*% t(y_prev))%*%y_prev%*%y
+resid<-y-t(y_prev)%*% beta_hat
+s_square<-(t(resid) %*%(resid))/(n-p)
+
+v_posterior<-LaplacesDemon::rinvgamma(500, (n-p)/2, (n-p)*s_square/2)
+phi_posterior<-matrix(NA, nrow=500, ncol=p)
+for (i in 1:500) {
+  phi_posterior[i,]<-MASS::mvrnorm(1, mu = beta_hat, Sigma = v_posterior[i]*solve(y_prev %*% t(y_prev)))
+}
+```
+
+Here are summaries of the inferred model parameters. The variance of the AR process is characterized by the posterior distribution of $v$. The solid blue lines denote the mean and the dashed blue lines denote the 95% credible intervals.
+
+```{r}
+v_posterior_df<-data.frame(v_posterior)
+
+v_posterior_summary <- v_posterior_df %>% 
+  summarize(mean=mean(v_posterior, na.rm=T),
+            lower=quantile(v_posterior, prob=0.025, na.rm=T),
+            upper=quantile(v_posterior, prob=0.975, na.rm=T))
+
+ggplot(v_posterior_df, aes(x=v_posterior))+
+  geom_histogram()+
+  geom_vline(data=v_posterior_summary, aes(xintercept=mean), col="blue")+
+  geom_vline(data=v_posterior_summary, aes(xintercept=lower), col="blue", lty=2)+
+  geom_vline(data=v_posterior_summary, aes(xintercept=upper), col="blue", lty=2)+
+  theme_classic()
+
+phi_posterior_df<-data.frame(phi_posterior) %>% 
+  rename(phi_1=X1, phi_2=X2) %>% 
+  gather(value="phi_posterior")
+
+phi_posterior_summary <- phi_posterior_df %>%  
+  group_by(key) %>% 
+  summarize(mean=mean(phi_posterior, na.rm=T),
+            lower=quantile(phi_posterior, prob=0.025, na.rm=T),
+            upper=quantile(phi_posterior, prob=0.975, na.rm=T))
+
+ggplot(phi_posterior_df, aes(x=phi_posterior))+
+  geom_histogram()+
+  geom_vline(data=phi_posterior_summary, aes(xintercept=mean), col="blue")+
+  geom_vline(data=phi_posterior_summary, aes(xintercept=lower), col="blue", lty=2)+
+  geom_vline(data=phi_posterior_summary, aes(xintercept=upper), col="blue", lty=2)+
+  facet_wrap(. ~ key)+
+  theme_classic()
+```
+
+I then used the $\mathbf{\phi}$ sampled from the posterior to calculate the reciprocal roots. The code below allows both complex and reciprocal roots, but after checking, I found all reciprocal roots to be real.
+
+```{r}
+real_modulus_posterior<-data.frame(reciprocal_root_1=rep(NA, 500), reciprocal_root_2=rep(NA, 500))
+
+for(i in 1:500) {
+  poly_coef<-c(1, -phi_posterior[i,])
+  recroots<-data.frame(recroot=1/polyroot(poly_coef)) %>% 
+    mutate(im=Im(recroot)) %>% 
+    mutate(ReCom=if_else(abs(im)>0.0000000001, "Complex", "Real")) %>% 
+    mutate(modulus=if_else(ReCom=="Complex", Mod(recroot), Re(recroot))) %>% 
+    mutate(arg=abs(Arg(recroot))) %>% 
+    mutate(wavelength=2*pi/arg) %>% 
+    arrange(desc(wavelength)) %>% 
+    arrange(ReCom) %>% 
+    distinct(round(modulus, digits = 10),.keep_all = T)
+  real_modulus<-unlist(recroots %>% filter(ReCom=="Real") %>% select(modulus))
+  length(real_modulus)<-2
+  real_modulus_posterior[i,]<-real_modulus
+}
+
+modulus_posterior_df<-real_modulus_posterior %>% 
+  gather(value="reciprocal_root_posterior")
+modulus_posterior_summary <- modulus_posterior_df%>% 
+  group_by(key) %>% 
+  summarize(mean=mean(reciprocal_root_posterior, na.rm=T),
+            lower=quantile(reciprocal_root_posterior, prob=0.025, na.rm=T),
+            upper=quantile(reciprocal_root_posterior, prob=0.975, na.rm=T))
+ggplot(modulus_posterior_df, aes(x=reciprocal_root_posterior))+
+  geom_histogram()+
+  geom_vline(data=modulus_posterior_summary, aes(xintercept=mean), col="blue")+
+  geom_vline(data=modulus_posterior_summary, aes(xintercept=lower), col="blue", lty=2)+
+  geom_vline(data=modulus_posterior_summary, aes(xintercept=upper), col="blue", lty=2)+
+  facet_wrap(. ~ key)+
+  theme_classic()
+```
+
+I concluded that the time series can be fitted with a AR(2) model, with two real AR coefficients (`r round(phi_posterior_summary$mean[1], 2)` and `r round(phi_posterior_summary$mean[2], 2)`) and variance `r round(v_posterior_summary$mean, 2)`.
+
+# (c)
+Using the _arima_ function in R, I fitted ARMA($p$, $q$) models, with $p=1, ..., 5$ and $q=1, ..., 5$. The AIC values are shown in the following grids.
+```{r}
+AIC_arma<-matrix(NA, nrow=5, ncol=5)
+for (p in 1:5) {
+  for (q in 1:5) {
+    AIC_arma[p, q]<-AIC(arima(ts, order = c(p, 0, q), include.mean = F))
+  }
+}
+AIC_arma_df<-data.frame(AIC_arma) %>% 
+  mutate(p=c(1:5)) %>% 
+  gather("q", "AIC",-p) %>% 
+  mutate(q=substr(q, 2,2)) %>% 
+  mutate(q=as.numeric(q))
+ggplot(AIC_arma_df, aes(x=p, y=q, fill=AIC, label=round(AIC, 2)))+
+  geom_tile()+
+  geom_text(color="white")+
+  scale_fill_viridis_c(direction = -1)+
+  theme_minimal()
+```
+
+It was shown that ARMA(1, 1) had the lowest AIC. I therefore estimated the AR and MA coefficients, as well as the variance.
+```{r}
+arima(ts, order = c(1, 0, 1), include.mean = F)
+
+arma_coef<-coef(arima(ts, order = c(1, 0, 1), include.mean = F))
+arma_coef_sd<-sqrt(diag(vcov(arima(ts, order = c(1, 0, 1), include.mean = F))))
+sigma2<-arima(ts, order = c(1, 0, 1), include.mean = F)$sigma2
+arma_summary<-data.frame(Coefficient=c(names(arma_coef), "sigma^2"), Mean=c(arma_coef, sigma2), SD=c(arma_coef_sd, NA))
+ggplot(arma_summary)+
+  geom_point(aes(x=Coefficient, y=Mean))+
+  geom_errorbar(aes(x=Coefficient, ymin=Mean-1.96*SD,ymax=Mean+1.96*SD), width=0.2, na.rm = T)+
+  geom_hline(yintercept = 0, lty=2)+
+  theme_classic()
+```
+
+# (d)
+The new AR coefficient is the first reciprocal root, $\alpha_1$, according to the new characteristic equation $\Phi^*(u)=1-\alpha_1 u=0$.
+
+To invert the second AR component to a MA component, I used the following algorithm, following Prado & West (2010, pp. 68).
+
+1. Initialize the algorithm by setting $\psi^*_1=0$.
+
+2. Update $\psi^*_1=\psi^*_1+\alpha_2$.
+
+I did the inversion for all 500 sets of AR coefficients sampled from the posterior.
+
+I here summarize the AR and MA coefficients.
+```{r}
+p<-2
+q<-1
+psi<-matrix(0, nrow=500, ncol=q)
+for (k in 1:500) {
+  for (i in 2:p) {
+    psi[k,1]<-psi[k,1]+real_modulus_posterior[k, i]
+  }
+}
+
+arma_coef_df<-data.frame(ar_1=real_modulus_posterior[,1], ma_1=psi[,1]) %>% 
+  gather(value="Coefficient")
+arma_coef_df_summary<-arma_coef_df %>%
+  group_by(key) %>%
+  summarize(mean=mean(Coefficient, na.rm=T),
+            lower=quantile(Coefficient, prob=0.025, na.rm=T),
+            upper=quantile(Coefficient, prob=0.975, na.rm=T))
+
+ggplot(data.frame(arma_coef_df), aes(x=Coefficient))+
+  geom_histogram()+
+  geom_vline(data=arma_coef_df_summary, aes(xintercept=mean), col="blue")+
+  geom_vline(data=arma_coef_df_summary, aes(xintercept=lower), col="blue", lty=2)+
+  geom_vline(data=arma_coef_df_summary, aes(xintercept=upper), col="blue", lty=2)+
+  facet_wrap(. ~ key)+
+  theme_classic()
+```
+
+The estimates are highly similar to those obtained with the _arima_ function.
+

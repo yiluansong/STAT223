@@ -1,3 +1,5 @@
+#Chap 2 Problem 22 (This is a draft. Final version in R markdown)
+
 library(tidyverse)
 
 iso<-read.table("./STAT 223/oxygen_isotope.txt", skip=6, header=F)

@@ -1,3 +1,5 @@
+#Chap 2 Problem 19 (This is a draft. Final version in R markdown)
+
 roots<-polyroot(c(1, -0.9, 0.9))
 Mod(roots)
 
